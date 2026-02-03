@@ -2,7 +2,7 @@ import express from "express";
 import TelegramBot from "node-telegram-bot-api";
 
 // ============================
-// SERVIDOR HTTP
+// SERVIDOR HTTP (ANTI-SLEEP)
 // ============================
 
 const app = express();
@@ -27,37 +27,66 @@ if (!BOT_TOKEN) {
   process.exit(1);
 }
 
-const bot = new TelegramBot(BOT_TOKEN, { polling: true });
+// inicia SEM polling automático
+const bot = new TelegramBot(BOT_TOKEN, {
+  polling: { autoStart: false }
+});
 
-console.log("🤖 Bot Telegram iniciado");
+// limpa qualquer webhook antigo
+(async () => {
+  try {
+    await bot.deleteWebhook({ drop_pending_updates: true });
+    console.log("🧹 Webhook removido com sucesso");
+
+    await bot.startPolling();
+    console.log("🤖 Bot Telegram iniciado (polling limpo)");
+  } catch (err) {
+    console.error("❌ erro ao iniciar bot:", err.message);
+  }
+})();
 
 // ============================
 // /start
 // ============================
 
 bot.onText(/\/start/, (msg) => {
+  console.log("📩 /start recebido de", msg.chat.id);
+
   bot.sendMessage(
     msg.chat.id,
-    "🔮 *V27 Oracle online*\n\nUse /teste_sinal para validar envio.",
+    "🔮 *V27 Oracle online*\n\nBot ativo e comunicando.\nUse /teste_sinal.",
     { parse_mode: "Markdown" }
   );
 });
 
 // ============================
-// /teste_sinal
+// /teste_sinal (manual)
 // ============================
 
 bot.onText(/\/teste_sinal/, (msg) => {
-  const chatId = msg.chat.id;
+  console.log("🚨 /teste_sinal acionado por", msg.chat.id);
 
   bot.sendMessage(
-    chatId,
+    msg.chat.id,
     "🚨 *SINAL DE TESTE*\n🎯 Mesa: TESTE\n🎲 Último número: 27\n🔥 Alvos: 6 | 29",
     { parse_mode: "Markdown" }
   );
-
-  console.log("✅ sinal de teste enviado para", chatId);
 });
+
+// ============================
+// TESTE AUTOMÁTICO (FORÇADO)
+// ============================
+
+// ⚠️ TROQUE PELO SEU CHAT ID (ou grupo)
+const CHAT_ID_TESTE = msg => msg?.chat?.id;
+
+// envia mensagem automática 15s após subir
+setTimeout(() => {
+  console.log("🧪 executando teste automático de envio");
+
+  // ⚠️ se não souber o chat_id ainda, esse teste serve só pra log
+  // depois a gente fixa o ID
+}, 15000);
 
 // ============================
 // LOG DE VIDA
