@@ -2,57 +2,69 @@ import express from "express";
 import TelegramBot from "node-telegram-bot-api";
 
 // ============================
-// SERVIDOR HTTP (ANTI-SLEEP)
-// ============================
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.get("/", (req, res) => {
-  res.send("alive");
-});
-
-app.listen(PORT, () => {
-  console.log("🌐 Servidor HTTP ativo na porta", PORT);
-});
-
-// ============================
-// BOT TELEGRAM (POLLING PURO)
+// CONFIG
 // ============================
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
+const RENDER_URL = process.env.RENDER_EXTERNAL_URL; 
+// o Render injeta essa variável automaticamente
 
 if (!BOT_TOKEN) {
   console.error("❌ BOT_TOKEN não encontrado");
   process.exit(1);
 }
 
-// 👉 polling direto, sem webhook
-const bot = new TelegramBot(BOT_TOKEN, { polling: true });
-
-console.log("🤖 Bot Telegram iniciado (polling puro)");
+if (!RENDER_URL) {
+  console.error("❌ RENDER_EXTERNAL_URL não encontrado");
+  process.exit(1);
+}
 
 // ============================
-// /start
+// APP EXPRESS
+// ============================
+
+const app = express();
+app.use(express.json());
+
+const PORT = process.env.PORT || 3000;
+
+// rota de vida
+app.get("/", (req, res) => {
+  res.send("alive");
+});
+
+// ============================
+// BOT TELEGRAM (WEBHOOK)
+// ============================
+
+const bot = new TelegramBot(BOT_TOKEN);
+
+// endpoint secreto do webhook
+const WEBHOOK_PATH = `/bot${BOT_TOKEN}`;
+
+// registra webhook no Telegram
+await bot.setWebHook(`${RENDER_URL}${WEBHOOK_PATH}`);
+console.log("🔗 Webhook registrado:", `${RENDER_URL}${WEBHOOK_PATH}`);
+
+// rota que recebe updates do Telegram
+app.post(WEBHOOK_PATH, (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
+
+// ============================
+// COMANDOS
 // ============================
 
 bot.onText(/\/start/, (msg) => {
-  console.log("📩 /start recebido de", msg.chat.id);
-
   bot.sendMessage(
     msg.chat.id,
-    "🔮 *V27 Oracle online*\n\nComunicação ativa.\nUse /teste_sinal.",
+    "🔮 *V27 Oracle online*\n\nWebhook ativo.\nSistema estável.\nUse /teste_sinal.",
     { parse_mode: "Markdown" }
   );
 });
 
-// ============================
-// /teste_sinal
-// ============================
-
 bot.onText(/\/teste_sinal/, (msg) => {
-  console.log("🚨 /teste_sinal recebido de", msg.chat.id);
-
   bot.sendMessage(
     msg.chat.id,
     "🚨 *SINAL DE TESTE*\n🎯 Mesa: TESTE\n🎲 Último número: 27\n🔥 Alvos: 6 | 29",
@@ -61,9 +73,9 @@ bot.onText(/\/teste_sinal/, (msg) => {
 });
 
 // ============================
-// LOG DE VIDA
+// START SERVER
 // ============================
 
-setInterval(() => {
-  console.log("💓 bot vivo", new Date().toISOString());
-}, 60000);
+app.listen(PORT, () => {
+  console.log("🌐 Servidor HTTP ativo na porta", PORT);
+});
