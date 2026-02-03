@@ -2,14 +2,14 @@ import express from "express";
 import TelegramBot from "node-telegram-bot-api";
 
 // ============================
-// SERVIDOR HTTP (ANTI-SLEEP)
+// SERVIDOR HTTP
 // ============================
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get("/", (req, res) => {
-  res.status(200).send("alive");
+  res.send("alive");
 });
 
 app.listen(PORT, () => {
@@ -32,17 +32,31 @@ const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 console.log("🤖 Bot Telegram iniciado");
 
 // ============================
-// COMANDO /start
+// /start
 // ============================
 
 bot.onText(/\/start/, (msg) => {
+  bot.sendMessage(
+    msg.chat.id,
+    "🔮 *V27 Oracle online*\n\nUse /teste_sinal para validar envio.",
+    { parse_mode: "Markdown" }
+  );
+});
+
+// ============================
+// /teste_sinal
+// ============================
+
+bot.onText(/\/teste_sinal/, (msg) => {
   const chatId = msg.chat.id;
 
   bot.sendMessage(
     chatId,
-    "🔮 *V27 Oracle online*\n\nEstou ativo e monitorando sinais.\nQuando houver oportunidade, eu aviso.",
+    "🚨 *SINAL DE TESTE*\n🎯 Mesa: TESTE\n🎲 Último número: 27\n🔥 Alvos: 6 | 29",
     { parse_mode: "Markdown" }
   );
+
+  console.log("✅ sinal de teste enviado para", chatId);
 });
 
 // ============================
