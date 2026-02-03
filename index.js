@@ -17,7 +17,7 @@ app.listen(PORT, () => {
 });
 
 // ============================
-// BOT TELEGRAM
+// BOT TELEGRAM (POLLING PURO)
 // ============================
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -27,23 +27,10 @@ if (!BOT_TOKEN) {
   process.exit(1);
 }
 
-// inicia SEM polling automático
-const bot = new TelegramBot(BOT_TOKEN, {
-  polling: { autoStart: false }
-});
+// 👉 polling direto, sem webhook
+const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
-// limpa webhook antigo (NOME CORRETO DO MÉTODO)
-(async () => {
-  try {
-    await bot.deleteWebHook({ drop_pending_updates: true });
-    console.log("🧹 Webhook removido com sucesso");
-
-    await bot.startPolling();
-    console.log("🤖 Bot Telegram iniciado (polling limpo)");
-  } catch (err) {
-    console.error("❌ erro ao iniciar bot:", err.message);
-  }
-})();
+console.log("🤖 Bot Telegram iniciado (polling puro)");
 
 // ============================
 // /start
