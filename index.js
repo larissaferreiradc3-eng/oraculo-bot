@@ -20,7 +20,7 @@ app.listen(PORT, () => {
 // BOT TELEGRAM
 // ============================
 
-const 7726664807:AAEYuILAr2lsB1rOWeSjLBib5RsZ3CUIJfA = process.env.BOT_TOKEN;
+const BOT_TOKEN = process.env.BOT_TOKEN;
 
 if (!BOT_TOKEN) {
   console.error("❌ BOT_TOKEN não encontrado");
