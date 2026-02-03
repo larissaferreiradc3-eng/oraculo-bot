@@ -6,16 +6,14 @@ import TelegramBot from "node-telegram-bot-api";
 // ============================
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const RENDER_URL = process.env.RENDER_EXTERNAL_URL; 
-// o Render injeta essa variável automaticamente
+const RENDER_URL = process.env.RENDER_EXTERNAL_URL;
 
-if (!BOT_TOKEN) {
-  console.error("❌ BOT_TOKEN não encontrado");
-  process.exit(1);
-}
+// 🔴 TROQUE PELO SEU CHAT ID (por enquanto DM)
+// depois a gente muda pra grupo
+const DESTINO_CHAT_ID = process.env.DESTINO_CHAT_ID;
 
-if (!RENDER_URL) {
-  console.error("❌ RENDER_EXTERNAL_URL não encontrado");
+if (!BOT_TOKEN || !RENDER_URL || !DESTINO_CHAT_ID) {
+  console.error("❌ Variáveis de ambiente faltando");
   process.exit(1);
 }
 
@@ -28,7 +26,6 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// rota de vida
 app.get("/", (req, res) => {
   res.send("alive");
 });
@@ -42,34 +39,59 @@ const bot = new TelegramBot(BOT_TOKEN);
 // endpoint secreto do webhook
 const WEBHOOK_PATH = `/bot${BOT_TOKEN}`;
 
-// registra webhook no Telegram
+// registra webhook
 await bot.setWebHook(`${RENDER_URL}${WEBHOOK_PATH}`);
 console.log("🔗 Webhook registrado:", `${RENDER_URL}${WEBHOOK_PATH}`);
 
-// rota que recebe updates do Telegram
+// recebe updates do Telegram
 app.post(WEBHOOK_PATH, (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
 
 // ============================
-// COMANDOS
+// COMANDOS BÁSICOS
 // ============================
 
 bot.onText(/\/start/, (msg) => {
   bot.sendMessage(
     msg.chat.id,
-    "🔮 *V27 Oracle online*\n\nWebhook ativo.\nSistema estável.\nUse /teste_sinal.",
+    "🔮 *V27 Oracle online*\n\nSinais reais ativados.\nAguardando gatilhos...",
     { parse_mode: "Markdown" }
   );
 });
 
-bot.onText(/\/teste_sinal/, (msg) => {
-  bot.sendMessage(
-    msg.chat.id,
-    "🚨 *SINAL DE TESTE*\n🎯 Mesa: TESTE\n🎲 Último número: 27\n🔥 Alvos: 6 | 29",
-    { parse_mode: "Markdown" }
-  );
+// ============================
+// 🚨 ENDPOINT DE SINAL REAL
+// ============================
+// SUA API VAI CHAMAR ISSO
+
+app.post("/sinal", async (req, res) => {
+  try {
+    const { mesa, ultimo_numero, alvos } = req.body;
+
+    if (!mesa || ultimo_numero === undefined || !alvos) {
+      return res.status(400).json({ erro: "dados incompletos" });
+    }
+
+    const mensagem = `
+🚨 *SINAL DETECTADO*
+🎯 *Mesa:* ${mesa}
+🎲 *Último número:* ${ultimo_numero}
+🔥 *Alvos:* ${alvos.join(" | ")}
+    `;
+
+    await bot.sendMessage(DESTINO_CHAT_ID, mensagem, {
+      parse_mode: "Markdown"
+    });
+
+    console.log("✅ sinal enviado:", mesa, ultimo_numero, alvos);
+
+    res.json({ status: "sinal enviado" });
+  } catch (err) {
+    console.error("❌ erro ao enviar sinal:", err.message);
+    res.status(500).json({ erro: "falha interna" });
+  }
 });
 
 // ============================
