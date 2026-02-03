@@ -32,10 +32,10 @@ const bot = new TelegramBot(BOT_TOKEN, {
   polling: { autoStart: false }
 });
 
-// limpa qualquer webhook antigo
+// limpa webhook antigo (NOME CORRETO DO MÉTODO)
 (async () => {
   try {
-    await bot.deleteWebhook({ drop_pending_updates: true });
+    await bot.deleteWebHook({ drop_pending_updates: true });
     console.log("🧹 Webhook removido com sucesso");
 
     await bot.startPolling();
@@ -54,17 +54,17 @@ bot.onText(/\/start/, (msg) => {
 
   bot.sendMessage(
     msg.chat.id,
-    "🔮 *V27 Oracle online*\n\nBot ativo e comunicando.\nUse /teste_sinal.",
+    "🔮 *V27 Oracle online*\n\nComunicação ativa.\nUse /teste_sinal.",
     { parse_mode: "Markdown" }
   );
 });
 
 // ============================
-// /teste_sinal (manual)
+// /teste_sinal
 // ============================
 
 bot.onText(/\/teste_sinal/, (msg) => {
-  console.log("🚨 /teste_sinal acionado por", msg.chat.id);
+  console.log("🚨 /teste_sinal recebido de", msg.chat.id);
 
   bot.sendMessage(
     msg.chat.id,
@@ -72,21 +72,6 @@ bot.onText(/\/teste_sinal/, (msg) => {
     { parse_mode: "Markdown" }
   );
 });
-
-// ============================
-// TESTE AUTOMÁTICO (FORÇADO)
-// ============================
-
-// ⚠️ TROQUE PELO SEU CHAT ID (ou grupo)
-const CHAT_ID_TESTE = msg => msg?.chat?.id;
-
-// envia mensagem automática 15s após subir
-setTimeout(() => {
-  console.log("🧪 executando teste automático de envio");
-
-  // ⚠️ se não souber o chat_id ainda, esse teste serve só pra log
-  // depois a gente fixa o ID
-}, 15000);
 
 // ============================
 // LOG DE VIDA
