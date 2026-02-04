@@ -1,6 +1,5 @@
 import express from "express";
 import TelegramBot from "node-telegram-bot-api";
-import fetch from "node-fetch";
 
 /* =========================
    ENV
@@ -31,6 +30,7 @@ app.get("/", (req, res) => {
 ========================= */
 
 const bot = new TelegramBot(BOT_TOKEN);
+
 const WEBHOOK_PATH = `/bot${BOT_TOKEN}`;
 const WEBHOOK_URL = `${RENDER_EXTERNAL_URL}${WEBHOOK_PATH}`;
 
@@ -42,7 +42,7 @@ app.post(WEBHOOK_PATH, (req, res) => {
   res.sendStatus(200);
 });
 
-// conforto psicológico 😌
+// comandos de conforto / verificação
 bot.onText(/\/start/, (msg) => {
   bot.sendMessage(
     msg.chat.id,
@@ -53,7 +53,7 @@ bot.onText(/\/start/, (msg) => {
 bot.onText(/\/status/, (msg) => {
   bot.sendMessage(
     msg.chat.id,
-    "🟢 Oráculo ATIVO\n⏱️ Verificação a cada 1 minuto\n🤫 Só falo quando faz sentido."
+    "🟢 Oráculo ATIVO\n⏱️ Leitura da API a cada 1 minuto\n🤫 Só falo quando faz sentido."
   );
 });
 
@@ -69,16 +69,16 @@ const ORACULO_STATUS_URL =
   "https://oraculo-bot-9iyu.onrender.com/oraculo/status";
 
 /* =========================
-   FUNÇÃO DE LEITURA
+   FUNÇÃO DE LEITURA DA API
 ========================= */
 
 async function verificarOraculo() {
   try {
-    const res = await fetch(ORACULO_STATUS_URL);
-    const data = await res.json();
+    const response = await fetch(ORACULO_STATUS_URL);
+    const data = await response.json();
 
-    if (!data?.mesas || !Array.isArray(data.mesas)) {
-      console.log("⚠️ Nenhuma mesa válida retornada");
+    if (!data || !Array.isArray(data.mesas)) {
+      console.log("⚠️ Oráculo retornou dados inválidos");
       return;
     }
 
@@ -99,16 +99,15 @@ async function verificarOraculo() {
       // só considera mesas ATIVAS
       if (status !== "ATIVO") continue;
 
-      // precisa ter número
+      // gatilho do Vortex 27
       if (ultimoNumero !== 27) continue;
 
-      // evita repetir sinal
+      // evita sinal duplicado
       if (mesasJaSinalizadas.has(mesaId)) continue;
 
-      // validação mínima
+      // precisa ter alvos definidos
       if (!Array.isArray(alvos) || alvos.length === 0) continue;
 
-      // 🚨 SINAL
       const mensagem = `
 🎯 SINAL VORTEX 27
 
@@ -127,17 +126,15 @@ ${alvos.join(" • ")}
 
       mesasJaSinalizadas.add(mesaId);
 
-      console.log(
-        `📣 SINAL ENVIADO → ${mesaId}`
-      );
+      console.log(`📣 SINAL ENVIADO → ${mesaId}`);
     }
   } catch (err) {
-    console.error("❌ Erro ao ler Oráculo:", err.message);
+    console.error("❌ Erro ao consultar Oráculo:", err.message);
   }
 }
 
 /* =========================
-   LOOP (1 MINUTO)
+   LOOP DE VERIFICAÇÃO
 ========================= */
 
 setInterval(verificarOraculo, 60_000);
