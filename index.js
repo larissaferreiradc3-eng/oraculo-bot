@@ -10,12 +10,7 @@ const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL;
 const CHAT_ID = process.env.CHAT_ID;
 const ORACULO_API_URL = process.env.ORACULO_API_URL;
 
-if (
-  !BOT_TOKEN ||
-  !RENDER_EXTERNAL_URL ||
-  !CHAT_ID ||
-  !ORACULO_API_URL
-) {
+if (!BOT_TOKEN || !RENDER_EXTERNAL_URL || !CHAT_ID || !ORACULO_API_URL) {
   console.error("❌ Variáveis de ambiente faltando");
   process.exit(1);
 }
@@ -51,14 +46,7 @@ app.post(WEBHOOK_PATH, (req, res) => {
 bot.onText(/\/start/, (msg) => {
   bot.sendMessage(
     msg.chat.id,
-    "🔮 Oráculo online.\nObservando as mesas em silêncio inteligente."
-  );
-});
-
-bot.onText(/\/status/, (msg) => {
-  bot.sendMessage(
-    msg.chat.id,
-    "🟢 Oráculo ATIVO\n⏱️ Leitura da API a cada 1 minuto"
+    "🔮 Oráculo online.\nAPI detecta gatilhos.\nBot confirma com inteligência."
   );
 });
 
@@ -66,12 +54,38 @@ bot.onText(/\/status/, (msg) => {
    CONTROLE INTERNO
 ========================= */
 
-const mesasJaSinalizadas = new Set();
-
 const ORACULO_STATUS_URL = `${ORACULO_API_URL}/oraculo/status`;
 
+// evita sinal duplicado
+const mesasSinalizadas = new Set();
+
+// padrões clássicos do 27
+const PADROES_27 = [2, 20, 22];
+
+// score mínimo
+const SCORE_MINIMO = 4;
+
 /* =========================
-   LEITURA DA API
+   FUNÇÕES DE SCORE
+========================= */
+
+function scoreDuzia(numero) {
+  if (numero >= 1 && numero <= 24) return 2; // 1ª ou 2ª
+  return 0;
+}
+
+function scoreHistorico(alvos) {
+  if (!Array.isArray(alvos)) return 0;
+  return alvos.some(n => PADROES_27.includes(n)) ? 2 : 0;
+}
+
+function scoreDistribuicao(alvos) {
+  if (!Array.isArray(alvos)) return 0;
+  return alvos.length >= 3 ? 1 : 0;
+}
+
+/* =========================
+   LEITURA + REFINAMENTO
 ========================= */
 
 async function verificarOraculo() {
@@ -84,9 +98,7 @@ async function verificarOraculo() {
       return;
     }
 
-    console.log(
-      `👀 Leitura do Oráculo: ${data.mesas.length} mesas analisadas`
-    );
+    console.log(`👀 Leitura do Oráculo: ${data.mesas.length} mesas analisadas`);
 
     for (const mesa of data.mesas) {
       const {
@@ -98,17 +110,50 @@ async function verificarOraculo() {
         rodada
       } = mesa;
 
+      // API já fez o filtro bruto
       if (status !== "ATIVO") continue;
       if (ultimoNumero !== 27) continue;
-      if (mesasJaSinalizadas.has(mesaId)) continue;
-      if (!Array.isArray(alvos) || alvos.length === 0) continue;
+      if (mesasSinalizadas.has(mesaId)) continue;
+
+      let score = 0;
+      let motivos = [];
+
+      // DÚZIA
+      const sDuzia = scoreDuzia(ultimoNumero);
+      if (sDuzia > 0) {
+        score += sDuzia;
+        motivos.push("1ª/2ª dúzia favorável");
+      }
+
+      // HISTÓRICO 27
+      const sHist = scoreHistorico(alvos);
+      if (sHist > 0) {
+        score += sHist;
+        motivos.push("Histórico positivo do 27");
+      }
+
+      // DISTRIBUIÇÃO
+      const sDist = scoreDistribuicao(alvos);
+      if (sDist > 0) {
+        score += sDist;
+        motivos.push("Alvos bem distribuídos");
+      }
+
+      // DECISÃO
+      if (score < SCORE_MINIMO) {
+        console.log(`❌ Mesa ${mesaId} ignorada (score ${score})`);
+        continue;
+      }
 
       const mensagem = `
 🎯 SINAL VORTEX 27
 
 🎰 Mesa: ${mesaNome || mesaId}
-🧲 Gatilho: 27
-🕒 Rodada: ${rodada ?? "?"}
+🧲 Gatilho detectado pela API
+📊 Score de confirmação: ${score}
+
+📌 Motivos:
+${motivos.map(m => `• ${m}`).join("\n")}
 
 🎯 Alvos:
 ${alvos.join(" • ")}
@@ -119,15 +164,11 @@ ${alvos.join(" • ")}
 
       await bot.sendMessage(CHAT_ID, mensagem);
 
-      mesasJaSinalizadas.add(mesaId);
-
-      console.log(`📣 SINAL ENVIADO → ${mesaId}`);
+      mesasSinalizadas.add(mesaId);
+      console.log(`📣 SINAL CONFIRMADO → ${mesaId}`);
     }
   } catch (err) {
-    console.error(
-      "❌ Erro ao consultar Oráculo:",
-      err.message
-    );
+    console.error("❌ Erro ao consultar Oráculo:", err.message);
   }
 }
 
