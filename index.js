@@ -8,8 +8,14 @@ import TelegramBot from "node-telegram-bot-api";
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL;
 const CHAT_ID = process.env.CHAT_ID;
+const ORACULO_API_URL = process.env.ORACULO_API_URL;
 
-if (!BOT_TOKEN || !RENDER_EXTERNAL_URL || !CHAT_ID) {
+if (
+  !BOT_TOKEN ||
+  !RENDER_EXTERNAL_URL ||
+  !CHAT_ID ||
+  !ORACULO_API_URL
+) {
   console.error("❌ Variáveis de ambiente faltando");
   process.exit(1);
 }
@@ -42,7 +48,6 @@ app.post(WEBHOOK_PATH, (req, res) => {
   res.sendStatus(200);
 });
 
-// comandos de conforto / verificação
 bot.onText(/\/start/, (msg) => {
   bot.sendMessage(
     msg.chat.id,
@@ -53,7 +58,7 @@ bot.onText(/\/start/, (msg) => {
 bot.onText(/\/status/, (msg) => {
   bot.sendMessage(
     msg.chat.id,
-    "🟢 Oráculo ATIVO\n⏱️ Leitura da API a cada 1 minuto\n🤫 Só falo quando faz sentido."
+    "🟢 Oráculo ATIVO\n⏱️ Leitura da API a cada 1 minuto"
   );
 });
 
@@ -61,15 +66,12 @@ bot.onText(/\/status/, (msg) => {
    CONTROLE INTERNO
 ========================= */
 
-// evita sinal duplicado
 const mesasJaSinalizadas = new Set();
 
-// endpoint da API interna
-const ORACULO_STATUS_URL =
-  "https://oraculo-bot-9iyu.onrender.com/oraculo/status";
+const ORACULO_STATUS_URL = `${ORACULO_API_URL}/oraculo/status`;
 
 /* =========================
-   FUNÇÃO DE LEITURA DA API
+   LEITURA DA API
 ========================= */
 
 async function verificarOraculo() {
@@ -96,16 +98,9 @@ async function verificarOraculo() {
         rodada
       } = mesa;
 
-      // só considera mesas ATIVAS
       if (status !== "ATIVO") continue;
-
-      // gatilho do Vortex 27
       if (ultimoNumero !== 27) continue;
-
-      // evita sinal duplicado
       if (mesasJaSinalizadas.has(mesaId)) continue;
-
-      // precisa ter alvos definidos
       if (!Array.isArray(alvos) || alvos.length === 0) continue;
 
       const mensagem = `
@@ -129,12 +124,15 @@ ${alvos.join(" • ")}
       console.log(`📣 SINAL ENVIADO → ${mesaId}`);
     }
   } catch (err) {
-    console.error("❌ Erro ao consultar Oráculo:", err.message);
+    console.error(
+      "❌ Erro ao consultar Oráculo:",
+      err.message
+    );
   }
 }
 
 /* =========================
-   LOOP DE VERIFICAÇÃO
+   LOOP
 ========================= */
 
 setInterval(verificarOraculo, 60_000);
