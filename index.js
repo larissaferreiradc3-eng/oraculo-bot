@@ -23,7 +23,7 @@ const app = express();
 app.use(express.json());
 
 app.get("/", (req, res) => {
-  res.send("🤖 ORÁCULO BOT ONLINE");
+  res.send("🤖 ORÁCULO BOT ONLINE — MODO ESPELHO");
 });
 
 /* =========================
@@ -46,59 +46,27 @@ app.post(WEBHOOK_PATH, (req, res) => {
 bot.onText(/\/start/, (msg) => {
   bot.sendMessage(
     msg.chat.id,
-    "🔮 Oráculo online.\nAPI detecta gatilhos.\nBot confirma com inteligência."
+    "🔮 Oráculo em MODO ESPELHO.\nEstou apenas refletindo o que a API enxerga."
   );
 });
 
 /* =========================
-   CONTROLE INTERNO
+   ESPELHO DA API
 ========================= */
 
 const ORACULO_STATUS_URL = `${ORACULO_API_URL}/oraculo/status`;
 
-// evita sinal duplicado
-const mesasSinalizadas = new Set();
-
-// padrões clássicos do 27
-const PADROES_27 = [2, 20, 22];
-
-// score mínimo
-const SCORE_MINIMO = 4;
-
-/* =========================
-   FUNÇÕES DE SCORE
-========================= */
-
-function scoreDuzia(numero) {
-  if (numero >= 1 && numero <= 24) return 2; // 1ª ou 2ª
-  return 0;
-}
-
-function scoreHistorico(alvos) {
-  if (!Array.isArray(alvos)) return 0;
-  return alvos.some(n => PADROES_27.includes(n)) ? 2 : 0;
-}
-
-function scoreDistribuicao(alvos) {
-  if (!Array.isArray(alvos)) return 0;
-  return alvos.length >= 3 ? 1 : 0;
-}
-
-/* =========================
-   LEITURA + REFINAMENTO
-========================= */
-
-async function verificarOraculo() {
+async function espelharOraculo() {
   try {
     const response = await fetch(ORACULO_STATUS_URL);
     const data = await response.json();
 
     if (!data || !Array.isArray(data.mesas)) {
-      console.log("⚠️ Oráculo retornou dados inválidos");
+      console.log("⚠️ API retornou dados inválidos");
       return;
     }
 
-    console.log(`👀 Leitura do Oráculo: ${data.mesas.length} mesas analisadas`);
+    console.log(`🪞 ESPELHO: ${data.mesas.length} mesas`);
 
     for (const mesa of data.mesas) {
       const {
@@ -106,69 +74,26 @@ async function verificarOraculo() {
         mesaNome,
         status,
         ultimoNumero,
-        alvos,
-        rodada
+        rodada,
+        alvos
       } = mesa;
 
-      // API já fez o filtro bruto
-      if (status !== "ATIVO") continue;
-      if (ultimoNumero !== 27) continue;
-      if (mesasSinalizadas.has(mesaId)) continue;
-
-      let score = 0;
-      let motivos = [];
-
-      // DÚZIA
-      const sDuzia = scoreDuzia(ultimoNumero);
-      if (sDuzia > 0) {
-        score += sDuzia;
-        motivos.push("1ª/2ª dúzia favorável");
-      }
-
-      // HISTÓRICO 27
-      const sHist = scoreHistorico(alvos);
-      if (sHist > 0) {
-        score += sHist;
-        motivos.push("Histórico positivo do 27");
-      }
-
-      // DISTRIBUIÇÃO
-      const sDist = scoreDistribuicao(alvos);
-      if (sDist > 0) {
-        score += sDist;
-        motivos.push("Alvos bem distribuídos");
-      }
-
-      // DECISÃO
-      if (score < SCORE_MINIMO) {
-        console.log(`❌ Mesa ${mesaId} ignorada (score ${score})`);
-        continue;
-      }
-
       const mensagem = `
-🎯 SINAL VORTEX 27
+🪞 ESPELHO DA API
 
 🎰 Mesa: ${mesaNome || mesaId}
-🧲 Gatilho detectado pela API
-📊 Score de confirmação: ${score}
+📌 Status: ${status}
+🔢 Último número: ${ultimoNumero ?? "—"}
+🕒 Rodada: ${rodada ?? "—"}
 
-📌 Motivos:
-${motivos.map(m => `• ${m}`).join("\n")}
-
-🎯 Alvos:
-${alvos.join(" • ")}
-
-⏳ Aguardar 4 giros
-🎯 Entrada: 6ª e 7ª
+🎯 Alvos da API:
+${Array.isArray(alvos) && alvos.length > 0 ? alvos.join(" • ") : "—"}
 `;
 
       await bot.sendMessage(CHAT_ID, mensagem);
-
-      mesasSinalizadas.add(mesaId);
-      console.log(`📣 SINAL CONFIRMADO → ${mesaId}`);
     }
   } catch (err) {
-    console.error("❌ Erro ao consultar Oráculo:", err.message);
+    console.error("❌ Erro ao espelhar API:", err.message);
   }
 }
 
@@ -176,8 +101,8 @@ ${alvos.join(" • ")}
    LOOP
 ========================= */
 
-setInterval(verificarOraculo, 60_000);
-console.log("⏱️ Oráculo será verificado a cada 1 minuto");
+setInterval(espelharOraculo, 60_000);
+console.log("🪞 Modo ESPELHO ativo — leitura a cada 1 minuto");
 
 /* =========================
    SERVER
