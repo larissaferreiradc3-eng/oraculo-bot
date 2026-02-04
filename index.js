@@ -7,10 +7,15 @@ import TelegramBot from "node-telegram-bot-api";
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL;
+const ORACULO_API_URL = process.env.ORACULO_API_URL; // ex: https://oraculo-api-vqn8.onrender.com
 const CHAT_ID = process.env.CHAT_ID;
 
-if (!BOT_TOKEN || !RENDER_EXTERNAL_URL || !CHAT_ID) {
+if (!BOT_TOKEN || !RENDER_EXTERNAL_URL || !ORACULO_API_URL || !CHAT_ID) {
   console.error("❌ Variáveis de ambiente faltando");
+  console.log("➡️ BOT_TOKEN:", BOT_TOKEN ? "OK" : "MISSING");
+  console.log("➡️ RENDER_EXTERNAL_URL:", RENDER_EXTERNAL_URL ? "OK" : "MISSING");
+  console.log("➡️ ORACULO_API_URL:", ORACULO_API_URL ? "OK" : "MISSING");
+  console.log("➡️ CHAT_ID:", CHAT_ID ? "OK" : "MISSING");
   process.exit(1);
 }
 
@@ -18,16 +23,13 @@ if (!BOT_TOKEN || !RENDER_EXTERNAL_URL || !CHAT_ID) {
    CONFIG
 ========================= */
 
-const ORACULO_STATUS_URL =
-  "https://oraculo-bot-9iyu.onrender.com/oraculo/status";
-
-const POLLING_INTERVAL = 120000; // 2 minutos
+const POLL_INTERVAL = 2 * 60 * 1000; // 2 minutos
 
 /* =========================
-   LINKS DAS MESAS
+   LINKS DAS MESAS (MAPA)
 ========================= */
 
-const MESA_LINKS_BY_NAME = {
+const LINKS_MESAS = {
   "BRASILEIRA PRAGMATIC": "https://www.betano.bet.br/casino/live/games/brazilian-roulette/11354/tables/",
   "AUTO MEGA ROULETTE 0,50": "https://www.betano.bet.br/casino/live/games/auto-mega-roulette/10842/tables/",
   "AUTO ROULETTE 2,50": "https://www.betano.bet.br/casino/live/games/auto-roulette/3502/tables/",
@@ -50,81 +52,56 @@ const MESA_LINKS_BY_NAME = {
   "TURKISH MEGA ROULETTE": "https://www.betano.bet.br/casino/live/games/turkish-mega-roulette/17844/tables/",
   "TURKISH ROULETTE": "https://www.betano.bet.br/casino/live/games/turkish-roulette/3533/tables/",
   "VIP ROULETTE": "https://www.betano.bet.br/casino/live/games/vip-roulette/4859/tables/",
-  "MEGA ROULETTE 3000": "https://www.betano.bet.br/casino/live/games/mega-roulette-3000/31954/tables/"
+  "MEGA ROULETTE 3000": "https://www.betano.bet.br/casino/live/games/mega-roulette-3000/31954/tables/",
+
+  "LIGHTNING STORM": "https://www.betano.bet.br/casino/live/games/lightning-storm/16782/tables/",
+  "ROLETA RELAMPAGO": "https://www.betano.bet.br/casino/live/games/roleta-relampago/7895/tables/",
+  "ROLETA AO VIVO": "https://www.betano.bet.br/casino/live/games/roleta-ao-vivo/7899/tables/",
+  "FIREBALL ROULETTE": "https://www.betano.bet.br/casino/live/games/fireball-roulette/25208/tables/",
+  "xxxTREME LIGHTNING ROULETTE": "https://www.betano.bet.br/casino/live/games/xxxtreme-lightning-roulette/6828/tables/",
+  "AUTO ROULETTE EVOLUTION": "https://www.betano.bet.br/casino/live/games/auto-roulette/1529/tables/",
+  "LIGHTNING ROULETTE": "https://www.betano.bet.br/casino/live/games/lightning-roulette/1524/tables/",
+  "ROULETTE1": "https://www.betano.bet.br/casino/live/games/roulette/1526/tables/",
+  "SPEED AUTO ROULETTE": "https://www.betano.bet.br/casino/live/games/speed-auto-roulette/1538/tables/",
+  "AUTO ROULETTE VIP": "https://www.betano.bet.br/casino/live/games/auto-roulette-vip/1539/tables/",
+  "SPEED ROULETTE EVOLUTION": "https://www.betano.bet.br/casino/live/games/speed-roulette/1530/tables/",
+  "VIP ROULETTE EVOLUTION": "https://www.betano.bet.br/casino/live/games/vip-roulette/1532/tables/",
+  "RULETA EN ESPANOL": "https://www.betano.bet.br/casino/live/games/ruleta-en-espanol/6821/tables/",
+  "Instant ROULETTE": "https://www.betano.bet.br/casino/live/games/instant-roulette/2181/tables/",
+
+  "AUTO ROULETTE EZUGI": "https://www.betano.bet.br/casino/live/games/auto-roulette/18598/tables/",
+  "EZ ROULETTE BRAZIL": "https://www.betano.bet.br/casino/live/games/ez-dealer-roulette-brazil/15673/",
+  "EZ ROULETTE ENGLISH": "https://www.betano.bet.br/casino/live/games/ez-dealer-roulette-english/15670/",
+  "EZ ROULETTE HINDI": "https://www.betano.bet.br/casino/live/games/ez-dealer-roulette-hindi/25230/",
+  "EZ ROULETTE JAPANESE": "https://www.betano.bet.br/casino/live/games/ez-dealer-roulette-japanese/15671/",
+  "EZ ROULETTE LATINA": "https://www.betano.bet.br/casino/live/games/ez-dealer-roulette-latina/23554/",
+  "E ROULETTE MANDARIN": "https://www.betano.bet.br/casino/live/games/ez-dealer-roulette-mandarin/15672/",
+  "EZ ROULETTE NEDERLANDS": "https://www.betano.bet.br/casino/live/games/ez-dealer-roulette-nederlands/25231/",
+  "EZ ROULETTE SAVANNA": "https://www.betano.bet.br/casino/live/games/ez-dealer-roulette-savanna/24258/",
+  "EZ ROULETTE THAI": "https://www.betano.bet.br/casino/live/games/ez-dealer-roulette-thai/15669/",
+  "EZ ROULETTE TURKISH": "https://www.betano.bet.br/casino/live/games/ez-dealer-roulette-turkish/21263/",
+  "EZ ROULETTE FOOTBALL AUTO": "https://www.betano.bet.br/casino/live/games/football-auto-roulette/15718/tables/",
+  "EZ ROULETTE HALLOWEEN AUTO": "https://www.betano.bet.br/casino/live/games/halloween-auto-roulette/31277/tables/",
+  "EZ ROULETTE HORSE RACING": "https://www.betano.bet.br/casino/live/games/horse-racing-auto-roulette/23875/tables/",
+  "EZ ROULETTE ITALIAN": "https://www.betano.bet.br/casino/live/games/italian-roulette/18591/tables/"
 };
 
 /* =========================
-   HELPERS
-========================= */
-
-function normalizarNome(nome) {
-  if (!nome) return "";
-  return nome.toString().trim().toUpperCase().replace(/\s+/g, " ");
-}
-
-function getMesaLink(mesaNome) {
-  const nomeNormalizado = normalizarNome(mesaNome);
-
-  for (const key of Object.keys(MESA_LINKS_BY_NAME)) {
-    if (normalizarNome(key) === nomeNormalizado) {
-      return MESA_LINKS_BY_NAME[key];
-    }
-  }
-
-  return null;
-}
-
-function isNumeroBloco2(n) {
-  const bloco2 = new Set([
-    2, 12, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 32
-  ]);
-  return bloco2.has(n);
-}
-
-/* =========================
-   ESTADO GLOBAL DO BOT
-========================= */
-
-// anti repetição geral
-const fingerprintMesa = new Map();
-
-// estado de execução do gatilho 27 por mesa
-const estado27 = new Map();
-
-/*
-estado27:
-{
-  ativo: true,
-  gatilhoIndex: index do 27 na timeline,
-  numeroAnterior27: X,
-  alvos: [..],
-  aguardandoRodadas: N,
-  fase: "OBSERVACAO" | "ESPERA" | "ENTRADA" | "FINALIZADO" | "CANCELADO",
-  criadoEm: timestamp,
-  rodadaInicial: valor da rodada recebida,
-  enviadoSinal: false,
-  enviadosAcompanhamentos: Set
-}
-*/
-
-/* =========================
-   TELEGRAM + EXPRESS
+   BOT + SERVER
 ========================= */
 
 const app = express();
 app.use(express.json());
 
 app.get("/", (req, res) => {
-  res.send("🤖 ORÁCULO BOT EXECUTOR 27 ONLINE");
+  res.send("BOT ONLINE");
 });
 
 const bot = new TelegramBot(BOT_TOKEN);
-
 const WEBHOOK_PATH = `/bot${BOT_TOKEN}`;
-const WEBHOOK_URL = `${RENDER_EXTERNAL_URL}${WEBHOOK_PATH}`;
 
-await bot.setWebHook(WEBHOOK_URL);
-console.log("✅ Webhook Telegram registrado:", WEBHOOK_URL);
+await bot.setWebHook(`${RENDER_EXTERNAL_URL}${WEBHOOK_PATH}`);
+console.log("✅ Webhook Telegram registrado:", `${RENDER_EXTERNAL_URL}${WEBHOOK_PATH}`);
 
 app.post(WEBHOOK_PATH, (req, res) => {
   bot.processUpdate(req.body);
@@ -134,240 +111,94 @@ app.post(WEBHOOK_PATH, (req, res) => {
 bot.onText(/\/start/, async (msg) => {
   await bot.sendMessage(
     msg.chat.id,
-    "🔮 Oráculo Bot Executor 27 ativo.\n⏱️ Polling: 2 minutos.\n🟢 Apenas sinais ATIVOS.\n🎯 Execução automática do Gatilho 27."
+    "🤖 Oráculo Bot está ONLINE.\n\n✅ Estou monitorando a API e enviarei apenas sinais ATIVOS."
   );
 });
 
 /* =========================
-   DETECTAR SATURAÇÃO BLOCO 2
+   DEDUP (ANTI-SPAM)
 ========================= */
 
-function saturacaoBloco2(timeline) {
-  if (!Array.isArray(timeline)) return false;
+const sentSignals = new Set();
 
-  const ult5 = timeline.slice(0, 5);
-  const contBloco2 = ult5.filter(isNumeroBloco2).length;
-
-  return contBloco2 >= 3;
+function buildSignalKey(mesa) {
+  return `${mesa.mesaId}|${mesa.status}|${mesa.ultimoNumero}|${mesa.rodada}`;
 }
 
 /* =========================
-   GERAR FINGERPRINT DO EVENTO
+   FORMATADOR
 ========================= */
 
-function gerarFingerprint(mesa) {
-  return JSON.stringify({
-    status: mesa.status ?? null,
-    ultimoNumero: mesa.ultimoNumero ?? null,
-    rodada: mesa.rodada ?? null,
-    timeline: Array.isArray(mesa.timeline) ? mesa.timeline.slice(0, 10) : []
-  });
+function formatMessage(mesa) {
+  const nomeMesa = mesa.mesaNome || mesa.mesaId;
+  const linkMesa = LINKS_MESAS[nomeMesa] || "Link não cadastrado";
+
+  const alvosTxt = Array.isArray(mesa.alvos) && mesa.alvos.length
+    ? mesa.alvos.join(", ")
+    : "Sem alvos definidos";
+
+  return (
+`🚨 *SINAL ATIVO DETECTADO* 🚨
+
+🎰 *Mesa:* ${nomeMesa}
+🆔 *ID:* ${mesa.mesaId}
+
+📌 *Status:* ${mesa.status}
+🎯 *Alvos:* ${alvosTxt}
+🔢 *Último Número:* ${mesa.ultimoNumero ?? "?"}
+🎲 *Rodada:* ${mesa.rodada ?? "?"}
+
+🔗 *Acesse a Mesa:*
+${linkMesa}
+
+⚡ *Entre apenas nos alvos e siga o gerenciamento!*
+`
+  );
 }
 
 /* =========================
-   LÓGICA DO GATILHO 27
+   POLLING API
 ========================= */
 
-function detectarGatilho27(timeline) {
-  if (!Array.isArray(timeline)) return null;
-
-  const idx = timeline.indexOf(27);
-  if (idx === -1) return null;
-
-  // precisa ter anterior ao 27
-  if (idx + 1 >= timeline.length) return null;
-
-  const numeroAnterior = timeline[idx + 1];
-  if (typeof numeroAnterior !== "number") return null;
-
-  const alvo1 = numeroAnterior - 2;
-  const alvo2 = numeroAnterior + 2;
-
-  return {
-    idx27: idx,
-    numeroAnterior,
-    alvos: [alvo1, alvo2].filter(n => n >= 0 && n <= 36)
-  };
-}
-
-/* =========================
-   CANCELAMENTO POR REGRAS
-========================= */
-
-function deveCancelarAntesEntrada(timeline) {
-  if (!Array.isArray(timeline)) return false;
-
-  // regra: antes da 5 rodada não pode vir 0 ou 27 (difícil pagar)
-  const ult5 = timeline.slice(0, 5);
-  if (ult5.includes(0) || ult5.includes(27)) {
-    return true;
-  }
-
-  // saturação bloco2 forte
-  if (saturacaoBloco2(timeline)) {
-    return true;
-  }
-
-  return false;
-}
-
-/* =========================
-   FUNÇÃO DE MENSAGEM
-========================= */
-
-async function enviarMensagemGatilho27(mesa, estado, etapa) {
-  const mesaNome = mesa.mesaNome || mesa.mesaId;
-  const link = getMesaLink(mesa.mesaNome);
-
-  let titulo = "";
-  if (etapa === "ATIVACAO") titulo = "🟢 GATILHO 27 DETECTADO";
-  if (etapa === "ENTRADA") titulo = "🎯 ENTRADA CONFIRMADA — GATILHO 27";
-  if (etapa === "CANCELADO") titulo = "⛔ ENTRADA CANCELADA — GATILHO 27";
-  if (etapa === "GREEN") titulo = "✅ GREEN — GATILHO 27";
-  if (etapa === "LOSS") titulo = "❌ LOSS — GATILHO 27";
-  if (etapa === "ACOMPANHAMENTO") titulo = "👀 ACOMPANHAMENTO — GATILHO 27";
-
-  const msg = `
-${titulo}
-
-🎰 Mesa: ${mesaNome}
-🔢 Último número: ${mesa.ultimoNumero ?? "—"}
-🕒 Rodada API: ${mesa.rodada ?? "—"}
-
-📌 Número anterior ao 27: ${estado.numeroAnterior27}
-🎯 Alvos: ${estado.alvos.join(" / ")}
-
-📍 Fase atual: ${estado.fase}
-⏳ Rodadas aguardadas: ${estado.aguardandoRodadas}
-
-${link ? `🔗 Link da mesa:\n${link}` : "⚠️ Link não encontrado para essa mesa."}
-`;
-
-  await bot.sendMessage(CHAT_ID, msg);
-}
-
-/* =========================
-   PROCESSAR MESA
-========================= */
-
-async function processarMesa(mesa) {
-  if (!mesa || mesa.status !== "ATIVO") return;
-
-  const mesaId = mesa.mesaId;
-  const timeline = Array.isArray(mesa.timeline) ? mesa.timeline : [];
-
-  if (!mesaId) return;
-
-  // anti repetição básica (pra não floodar)
-  const fingerprint = gerarFingerprint(mesa);
-  const anterior = fingerprintMesa.get(mesaId);
-
-  if (anterior === fingerprint) {
-    return;
-  }
-
-  fingerprintMesa.set(mesaId, fingerprint);
-
-  // se já existe estado 27 ativo
-  let st = estado27.get(mesaId);
-
-  // se não existe, tenta detectar gatilho
-  if (!st) {
-    const gatilho = detectarGatilho27(timeline);
-    if (!gatilho) return;
-
-    st = {
-      ativo: true,
-      numeroAnterior27: gatilho.numeroAnterior,
-      alvos: gatilho.alvos,
-      aguardandoRodadas: 4, // espera obrigatória
-      fase: "ESPERA",
-      criadoEm: Date.now(),
-      rodadaInicial: mesa.rodada ?? null,
-      enviadoSinal: false,
-      enviadosAcompanhamentos: new Set(),
-      finalizado: false
-    };
-
-    estado27.set(mesaId, st);
-
-    await enviarMensagemGatilho27(mesa, st, "ATIVACAO");
-    return;
-  }
-
-  // se já cancelou/finalizou não faz nada
-  if (st.fase === "FINALIZADO" || st.fase === "CANCELADO") return;
-
-  // decrementa espera se o número mudou
-  if (st.aguardandoRodadas > 0) {
-    st.aguardandoRodadas -= 1;
-
-    // cancelamento na fase de espera
-    if (deveCancelarAntesEntrada(timeline)) {
-      st.fase = "CANCELADO";
-      await enviarMensagemGatilho27(mesa, st, "CANCELADO");
-      return;
-    }
-
-    // acompanhamento opcional
-    if (st.aguardandoRodadas === 2) {
-      st.fase = "OBSERVACAO";
-      await enviarMensagemGatilho27(mesa, st, "ACOMPANHAMENTO");
-    }
-
-    return;
-  }
-
-  // chegou fase de entrada (6ª e 7ª)
-  if (!st.enviadoSinal) {
-    st.fase = "ENTRADA";
-    st.enviadoSinal = true;
-
-    await enviarMensagemGatilho27(mesa, st, "ENTRADA");
-    return;
-  }
-
-  // depois do sinal, verifica se bateu alvo (GREEN)
-  const ultimo = mesa.ultimoNumero;
-
-  if (st.alvos.includes(ultimo)) {
-    st.fase = "FINALIZADO";
-    await enviarMensagemGatilho27(mesa, st, "GREEN");
-    return;
-  }
-
-  // se passou 2 rodadas após entrada sem bater, LOSS
-  if (!st.contadorEntrada) st.contadorEntrada = 0;
-  st.contadorEntrada += 1;
-
-  if (st.contadorEntrada >= 2) {
-    st.fase = "FINALIZADO";
-    await enviarMensagemGatilho27(mesa, st, "LOSS");
-    return;
-  }
-}
-
-/* =========================
-   LOOP PRINCIPAL
-========================= */
-
-async function loopOraculo() {
+async function consultarOraculo() {
   try {
-    const response = await fetch(ORACULO_STATUS_URL);
-    const data = await response.json();
+    const url = `${ORACULO_API_URL}/oraculo/status`;
+
+    const res = await fetch(url);
+    const data = await res.json();
 
     if (!data || !Array.isArray(data.mesas)) {
-      console.log("⚠️ Oráculo retornou dados inválidos");
+      console.log("⚠️ Resposta inválida da API.");
       return;
     }
 
-    const ativos = data.mesas.filter(m => m.status === "ATIVO");
+    console.log(`👀 Leitura do Oráculo: ${data.mesas.length} mesas analisadas`);
 
-    console.log(`👀 Leitura do Oráculo: ${ativos.length} mesas analisadas`);
+    const mesasAtivas = data.mesas.filter(m => m.status === "ATIVO");
 
-    for (const mesa of ativos) {
-      await processarMesa(mesa);
+    if (!mesasAtivas.length) {
+      console.log("🟡 Nenhum sinal ATIVO no momento.");
+      return;
     }
+
+    for (const mesa of mesasAtivas) {
+      const key = buildSignalKey(mesa);
+
+      if (sentSignals.has(key)) {
+        continue; // não repete
+      }
+
+      sentSignals.add(key);
+
+      const msg = formatMessage(mesa);
+
+      await bot.sendMessage(CHAT_ID, msg, {
+        parse_mode: "Markdown"
+      });
+
+      console.log("📤 Enviado sinal ATIVO:", mesa.mesaId);
+    }
+
   } catch (err) {
     console.error("❌ Erro ao consultar Oráculo:", err.message);
   }
@@ -377,14 +208,14 @@ async function loopOraculo() {
    START LOOP
 ========================= */
 
-setInterval(loopOraculo, POLLING_INTERVAL);
 console.log("⏱️ Oráculo será verificado a cada 2 minutos");
+setInterval(consultarOraculo, POLL_INTERVAL);
 
 /* =========================
-   SERVER
+   START SERVER
 ========================= */
 
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log("🚀 Servidor ativo na porta", PORT);
 });
