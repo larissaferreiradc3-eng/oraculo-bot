@@ -23,11 +23,10 @@ const BLOCO_2 = new Set([
 ]);
 
 // ============================
-// ESTADO EM MEMÓRIA
+// ESTADO POR MESA
 // ============================
 
-const mesas = {}; 
-// estrutura por mesa
+const mesas = {};
 
 // ============================
 // APP + BOT
@@ -41,7 +40,9 @@ const bot = new TelegramBot(BOT_TOKEN);
 // webhook
 const WEBHOOK_PATH = `/bot${BOT_TOKEN}`;
 await bot.setWebHook(`${RENDER_URL}${WEBHOOK_PATH}`);
+console.log("🔗 Webhook registrado");
 
+// recebe updates do Telegram
 app.post(WEBHOOK_PATH, (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
@@ -52,9 +53,11 @@ app.post(WEBHOOK_PATH, (req, res) => {
 // ============================
 
 bot.onText(/\/start/, (msg) => {
+  console.log("📩 /start recebido");
+
   bot.sendMessage(
     msg.chat.id,
-    "🔮 *V27 Oracle online*\n\nLógica V27 real ativa.\nAguardando padrões.",
+    "🔮 *V27 Oracle online*\n\nLógica V27 ativa.\nLogs habilitados.",
     { parse_mode: "Markdown" }
   );
 });
@@ -68,7 +71,10 @@ bot.onText(/\/start/, (msg) => {
 app.post("/coleta", async (req, res) => {
   const { mesa, numero } = req.body;
 
+  console.log("➡️ número recebido:", mesa, numero);
+
   if (!mesa || numero === undefined) {
+    console.log("❌ dados inválidos");
     return res.status(400).json({ erro: "dados inválidos" });
   }
 
@@ -77,12 +83,12 @@ app.post("/coleta", async (req, res) => {
       historico: [],
       estadoV27: null
     };
+    console.log("🆕 mesa criada:", mesa);
   }
 
   const estado = mesas[mesa];
   estado.historico.push(numero);
 
-  // mantém histórico curto
   if (estado.historico.length > 10) {
     estado.historico.shift();
   }
@@ -96,7 +102,8 @@ app.post("/coleta", async (req, res) => {
   if (numero === 27 && h.length >= 2) {
     const anterior = h[h.length - 2];
 
-    // valida 1ª ou 2ª dúzia
+    console.log("🟡 27 detectado | anterior:", anterior);
+
     if (anterior <= 24) {
       const refMenos = anterior - 2;
       const refMais = anterior + 2;
@@ -112,7 +119,13 @@ app.post("/coleta", async (req, res) => {
           alvos,
           sinalEnviado: false
         };
+
+        console.log("🟢 V27 armado | alvos:", alvos);
+      } else {
+        console.log("🔴 V27 descartado | fora do bloco 2");
       }
+    } else {
+      console.log("🔴 V27 descartado | dúzia inválida");
     }
   }
 
@@ -122,12 +135,16 @@ app.post("/coleta", async (req, res) => {
 
   if (estado.estadoV27?.aguardando) {
     estado.estadoV27.girosDesde27++;
+    console.log(
+      `⏳ aguardando giros ${estado.estadoV27.girosDesde27}/4`
+    );
 
-    // espera obrigatória de 4 giros
     if (
       estado.estadoV27.girosDesde27 === 4 &&
       !estado.estadoV27.sinalEnviado
     ) {
+      console.log("🚨 SINAL AUTORIZADO");
+
       await bot.sendMessage(
         DESTINO_CHAT_ID,
         `
@@ -142,10 +159,11 @@ app.post("/coleta", async (req, res) => {
       );
 
       estado.estadoV27.sinalEnviado = true;
+      console.log("✅ sinal enviado");
     }
 
-    // expiração após 7 giros
     if (estado.estadoV27.girosDesde27 > 7) {
+      console.log("🛑 V27 expirado");
       estado.estadoV27 = null;
     }
   }
