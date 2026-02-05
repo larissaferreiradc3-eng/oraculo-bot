@@ -8,7 +8,7 @@ import TelegramBot from "node-telegram-bot-api";
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL;
 
-const ORACULO_API_URL = process.env.ORACULO_API_URL; 
+const ORACULO_API_URL = process.env.ORACULO_API_URL;
 // Exemplo: https://oraculo-api-vqn8.onrender.com
 
 const CHAT_ID_PRIVATE = process.env.CHAT_ID_PRIVATE;
@@ -55,12 +55,27 @@ function getMesaLink(nomeMesa) {
   return null;
 }
 
+function normalizeAlvos(alvos) {
+  if (!Array.isArray(alvos)) return "";
+  return alvos.map((n) => String(n)).join(",");
+}
+
 /* =========================
-   CACHE DE DUPLICAÇÃO
+   CACHE (ANTI-SPAM REAL)
 ========================= */
 
-// evita repetir sinal
-const lastSignalByMesa = new Map();
+// Guarda o último status enviado por mesa (ATIVO/GREEN/LOSS)
+// E guarda o "ciclo" atual baseado em alvos
+const mesaCache = new Map();
+
+/*
+mesaCache = {
+  mesaId: {
+    lastStatusSent: "ATIVO" | "GREEN" | "LOSS" | null,
+    lastCycleKey: "alvosString",
+  }
+}
+*/
 
 /* =========================
    EXPRESS
@@ -83,13 +98,11 @@ const WEBHOOK_PATH = `/bot${BOT_TOKEN}`;
 await bot.setWebHook(`${RENDER_EXTERNAL_URL}${WEBHOOK_PATH}`);
 console.log("✅ Webhook Telegram registrado:", `${RENDER_EXTERNAL_URL}${WEBHOOK_PATH}`);
 
-// rota webhook
 app.post(WEBHOOK_PATH, (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
 
-// responde start
 bot.onText(/\/start/, async (msg) => {
   await bot.sendMessage(msg.chat.id, "🤖 Oráculo Bot online e conectado!");
 });
@@ -113,6 +126,63 @@ async function enviarMensagem(texto) {
 }
 
 /* =========================
+   FORMATADORES
+========================= */
+
+function formatarMensagemAtivo(mesa) {
+  const mesaId = mesa.mesaId || "SEM_ID";
+  const mesaNome = mesa.mesaNome || "Mesa desconhecida";
+  const rodada = mesa.rodada ?? "?";
+  const ultimoNumero = mesa.ultimoNumero ?? "?";
+
+  const alvosTxt = Array.isArray(mesa.alvos) && mesa.alvos.length
+    ? mesa.alvos.join(", ")
+    : "Sem alvos";
+
+  const linkMesa = getMesaLink(mesaNome);
+
+  return (
+    `🚨 <b>SINAL ATIVO DETECTADO</b> 🚨\n\n` +
+    `🎰 <b>Mesa:</b> ${mesaNome}\n` +
+    `🆔 <b>ID:</b> ${mesaId}\n\n` +
+    `📌 <b>Status:</b> ${mesa.status}\n` +
+    `🎯 <b>Alvos:</b> ${alvosTxt}\n` +
+    `🔢 <b>Último Número:</b> ${ultimoNumero}\n` +
+    `🎲 <b>Rodada:</b> ${rodada}\n\n` +
+    `🔗 <b>Acesse a Mesa:</b>\n${linkMesa ? linkMesa : "Link não cadastrado"}\n\n` +
+    `⚡ <b>Entre apenas nos alvos e siga o gerenciamento!</b>`
+  );
+}
+
+function formatarMensagemFinal(mesa) {
+  const mesaId = mesa.mesaId || "SEM_ID";
+  const mesaNome = mesa.mesaNome || "Mesa desconhecida";
+  const rodada = mesa.rodada ?? "?";
+  const ultimoNumero = mesa.ultimoNumero ?? "?";
+
+  const alvosTxt = Array.isArray(mesa.alvos) && mesa.alvos.length
+    ? mesa.alvos.join(", ")
+    : "Sem alvos";
+
+  const linkMesa = getMesaLink(mesaNome);
+
+  const emoji = mesa.status === "GREEN" ? "✅" : "❌";
+  const titulo = mesa.status === "GREEN" ? "GREEN CONFIRMADO" : "LOSS CONFIRMADO";
+
+  return (
+    `${emoji} <b>${titulo}</b> ${emoji}\n\n` +
+    `🎰 <b>Mesa:</b> ${mesaNome}\n` +
+    `🆔 <b>ID:</b> ${mesaId}\n\n` +
+    `📌 <b>Status:</b> ${mesa.status}\n` +
+    `🎯 <b>Alvos:</b> ${alvosTxt}\n` +
+    `🔢 <b>Último Número:</b> ${ultimoNumero}\n` +
+    `🎲 <b>Rodada final:</b> ${rodada}\n\n` +
+    `🔗 <b>Mesa:</b>\n${linkMesa ? linkMesa : "Link não cadastrado"}\n\n` +
+    `⚡ <b>Oráculo encerrado. Voltando para caça.</b>`
+  );
+}
+
+/* =========================
    CONSULTA API ORÁCULO
 ========================= */
 
@@ -128,42 +198,60 @@ async function consultarOraculo() {
 
     console.log(`👀 Leitura do Oráculo: ${data.mesas.length} mesas analisadas`);
 
-    // só sinais ATIVOS
-    const ativos = data.mesas.filter((m) => m.status === "ATIVO");
-
-    if (!ativos.length) {
-      console.log("⏳ Nenhum sinal ATIVO no momento");
-      return;
-    }
-
-    for (const mesa of ativos) {
+    for (const mesa of data.mesas) {
       const mesaId = mesa.mesaId || "SEM_ID";
-      const mesaNome = mesa.mesaNome || "Mesa desconhecida";
-      const rodada = mesa.rodada ?? "N/A";
-      const ultimoNumero = mesa.ultimoNumero ?? "N/A";
+      const status = mesa.status;
 
-      const assinatura = `${mesa.status}-${rodada}-${ultimoNumero}`;
+      if (!mesaCache.has(mesaId)) {
+        mesaCache.set(mesaId, {
+          lastStatusSent: null,
+          lastCycleKey: null
+        });
+      }
 
-      // evita repetir o mesmo sinal
-      if (lastSignalByMesa.get(mesaId) === assinatura) {
+      const cache = mesaCache.get(mesaId);
+
+      // chave do ciclo = alvos
+      const cycleKey = normalizeAlvos(mesa.alvos);
+
+      /* =========================
+         REGRAS ANTI-SPAM
+      ========================= */
+
+      // 1) Se estiver ATIVO:
+      // só envia uma vez por ciclo (alvos)
+      if (status === "ATIVO") {
+        if (cache.lastStatusSent === "ATIVO" && cache.lastCycleKey === cycleKey) {
+          continue;
+        }
+
+        cache.lastStatusSent = "ATIVO";
+        cache.lastCycleKey = cycleKey;
+
+        await enviarMensagem(formatarMensagemAtivo(mesa));
+        console.log("📤 Enviado sinal ATIVO:", mesaId);
         continue;
       }
 
-      lastSignalByMesa.set(mesaId, assinatura);
+      // 2) Se virar GREEN ou LOSS:
+      // só envia uma vez e encerra o ciclo
+      if (status === "GREEN" || status === "LOSS") {
+        if (cache.lastStatusSent === status && cache.lastCycleKey === cycleKey) {
+          continue;
+        }
 
-      const linkMesa = getMesaLink(mesaNome);
+        cache.lastStatusSent = status;
+        cache.lastCycleKey = cycleKey;
 
-      const mensagem =
-        `🚨 <b>SINAL ATIVO DETECTADO</b>\n\n` +
-        `🎰 <b>Mesa:</b> ${mesaNome}\n` +
-        `🆔 <b>ID:</b> ${mesaId}\n` +
-        `📍 <b>Status:</b> ${mesa.status}\n` +
-        `🎯 <b>Rodada:</b> ${rodada}\n` +
-        `🔢 <b>Último número:</b> ${ultimoNumero}\n\n` +
-        (linkMesa ? `🔗 <b>Link da Mesa:</b>\n${linkMesa}\n\n` : "") +
-        `⚡ <b>Oráculo V27 Monitorando...</b>`;
+        await enviarMensagem(formatarMensagemFinal(mesa));
+        console.log("🏁 Enviado resultado final:", status, mesaId);
 
-      await enviarMensagem(mensagem);
+        continue;
+      }
+
+      // 3) Se for qualquer outro status, ignora
+      // (MONITORANDO, ARMADO, DESCONHECIDO etc)
+      continue;
     }
   } catch (err) {
     console.error("❌ Erro ao consultar Oráculo:", err.message);
