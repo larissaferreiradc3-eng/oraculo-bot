@@ -13,7 +13,12 @@ const ORACULO_API_URL = process.env.ORACULO_API_URL;
 const CHAT_ID_PRIVATE = process.env.CHAT_ID_PRIVATE;
 const CHAT_ID_GROUP = process.env.CHAT_ID_GROUP;
 
-const POLL_INTERVAL = 2 * 60 * 1000; // 2 minutos
+const MIN_SCORE = Number(process.env.MIN_SCORE || 70); // só envia sinais com score >= isso
+const POLL_INTERVAL = 15 * 1000; // 15 segundos (mais rápido e sem delay)
+
+/* =========================
+   VALIDACOES
+========================= */
 
 if (!BOT_TOKEN || !RENDER_EXTERNAL_URL || !ORACULO_API_URL) {
   console.error("❌ Variáveis de ambiente faltando");
@@ -35,9 +40,7 @@ if (!CHAT_ID_PRIVATE || !CHAT_ID_GROUP) {
 ========================= */
 
 const LINKS_MESAS = {
-  // =========================
   // PRAGMATIC / BETANO
-  // =========================
   "BRASILEIRA PRAGMATIC": "https://www.betano.bet.br/casino/live/games/brazilian-roulette/11354/tables/",
   "AUTO MEGA ROULETTE 0,50": "https://www.betano.bet.br/casino/live/games/auto-mega-roulette/10842/tables/",
   "AUTO ROULETTE 2,50": "https://www.betano.bet.br/casino/live/games/auto-roulette/3502/tables/",
@@ -62,9 +65,7 @@ const LINKS_MESAS = {
   "VIP ROULETTE": "https://www.betano.bet.br/casino/live/games/vip-roulette/4859/tables/",
   "MEGA ROULETTE 3000": "https://www.betano.bet.br/casino/live/games/mega-roulette-3000/31954/tables/",
 
-  // =========================
   // EVOLUTION
-  // =========================
   "LIGHTNING STORM": "https://www.betano.bet.br/casino/live/games/lightning-storm/16782/tables/",
   "ROLETA RELAMPAGO": "https://www.betano.bet.br/casino/live/games/roleta-relampago/7895/tables/",
   "ROLETA AO VIVO": "https://www.betano.bet.br/casino/live/games/roleta-ao-vivo/7899/tables/",
@@ -80,9 +81,7 @@ const LINKS_MESAS = {
   "RULETA EN ESPANOL": "https://www.betano.bet.br/casino/live/games/ruleta-en-espanol/6821/tables/",
   "INSTANT ROULETTE": "https://www.betano.bet.br/casino/live/games/instant-roulette/2181/tables/",
 
-  // =========================
   // EZUGI
-  // =========================
   "AUTO ROULETTE EZUGI": "https://www.betano.bet.br/casino/live/games/auto-roulette/18598/tables/",
   "EZ ROULETTE BRAZIL": "https://www.betano.bet.br/casino/live/games/ez-dealer-roulette-brazil/15673/",
   "EZ ROULETTE ENGLISH": "https://www.betano.bet.br/casino/live/games/ez-dealer-roulette-english/15670/",
@@ -126,6 +125,16 @@ function normalizeAlvos(alvos) {
 ========================= */
 
 const mesaCache = new Map();
+
+/*
+cache:
+{
+  lastSentType: "ENTRAR" | "GREEN" | "LOSS",
+  lastCycleKey: "6,10",
+  lastRoundSent: 4,
+  lastNumberSent: 22
+}
+*/
 
 /* =========================
    EXPRESS
@@ -179,7 +188,7 @@ async function enviarMensagem(texto) {
    FORMATADORES
 ========================= */
 
-function formatarMensagemAtivo(mesa) {
+function formatarMensagemEntrada(mesa) {
   const mesaId = mesa.mesaId || "SEM_ID";
   const mesaNome = mesa.mesaNome || "Mesa desconhecida";
   const rodada = mesa.rodada ?? "?";
@@ -192,16 +201,18 @@ function formatarMensagemAtivo(mesa) {
 
   const linkMesa = getMesaLink(mesaNome);
 
+  const score = mesa.score ?? 0;
+
   return (
-    `🚨 <b>SINAL ATIVO DETECTADO</b> 🚨\n\n` +
+    `🚨 <b>ENTRAR AGORA</b> 🚨\n\n` +
     `🎰 <b>Mesa:</b> ${mesaNome}\n` +
     `🆔 <b>ID:</b> ${mesaId}\n\n` +
-    `📌 <b>Status:</b> ${mesa.status}\n` +
     `🎯 <b>Alvos:</b> ${alvosTxt}\n` +
-    `🔢 <b>Último Número:</b> ${ultimoNumero}\n` +
-    `🎲 <b>Rodada:</b> ${rodada}\n\n` +
-    `🔗 <b>Acesse a Mesa:</b>\n${linkMesa ? linkMesa : "Link não cadastrado"}\n\n` +
-    `⚡ <b>Entre apenas nos alvos e siga o gerenciamento!</b>`
+    `🎲 <b>Rodada:</b> ${rodada}\n` +
+    `🔢 <b>Último número:</b> ${ultimoNumero}\n` +
+    `📊 <b>Score:</b> ${score}\n\n` +
+    `🔗 <b>Mesa:</b>\n${linkMesa ? linkMesa : "Link não cadastrado"}\n\n` +
+    `⚡ <b>Entrada autorizada (rodada 4).</b>`
   );
 }
 
@@ -218,6 +229,8 @@ function formatarMensagemFinal(mesa) {
 
   const linkMesa = getMesaLink(mesaNome);
 
+  const score = mesa.score ?? 0;
+
   const emoji = mesa.status === "GREEN" ? "✅" : "❌";
   const titulo = mesa.status === "GREEN" ? "GREEN CONFIRMADO" : "LOSS CONFIRMADO";
 
@@ -225,10 +238,10 @@ function formatarMensagemFinal(mesa) {
     `${emoji} <b>${titulo}</b> ${emoji}\n\n` +
     `🎰 <b>Mesa:</b> ${mesaNome}\n` +
     `🆔 <b>ID:</b> ${mesaId}\n\n` +
-    `📌 <b>Status:</b> ${mesa.status}\n` +
     `🎯 <b>Alvos:</b> ${alvosTxt}\n` +
-    `🔢 <b>Último Número:</b> ${ultimoNumero}\n` +
-    `🎲 <b>Rodada final:</b> ${rodada}\n\n` +
+    `🎲 <b>Rodada:</b> ${rodada}\n` +
+    `🔢 <b>Número final:</b> ${ultimoNumero}\n` +
+    `📊 <b>Score:</b> ${score}\n\n` +
     `🔗 <b>Mesa:</b>\n${linkMesa ? linkMesa : "Link não cadastrado"}\n\n` +
     `⚡ <b>Oráculo encerrado. Voltando para caça.</b>`
   );
@@ -253,48 +266,74 @@ async function consultarOraculo() {
     for (const mesa of data.mesas) {
       const mesaId = mesa.mesaId || "SEM_ID";
       const status = mesa.status;
+      const rodada = mesa.rodada ?? null;
+      const ultimoNumero = mesa.ultimoNumero ?? null;
+      const score = mesa.score ?? 0;
 
       if (!mesaCache.has(mesaId)) {
         mesaCache.set(mesaId, {
-          lastStatusSent: null,
-          lastCycleKey: null
+          lastSentType: null,
+          lastCycleKey: null,
+          lastRoundSent: null,
+          lastNumberSent: null
         });
       }
 
       const cache = mesaCache.get(mesaId);
-
       const cycleKey = normalizeAlvos(mesa.alvos);
 
-      // ATIVO → envia apenas 1x por ciclo
-      if (status === "ATIVO") {
-        if (cache.lastStatusSent === "ATIVO" && cache.lastCycleKey === cycleKey) {
+      // FILTRO SCORE
+      if (status === "ATIVO" || status === "ENTRAR") {
+        if (score < MIN_SCORE) {
+          continue;
+        }
+      }
+
+      // ==========================
+      // ENTRADA: só manda na rodada 4
+      // ==========================
+      if ((status === "ATIVO" || status === "ENTRAR") && rodada === 4) {
+        if (
+          cache.lastSentType === "ENTRAR" &&
+          cache.lastCycleKey === cycleKey &&
+          cache.lastRoundSent === rodada &&
+          cache.lastNumberSent === ultimoNumero
+        ) {
           continue;
         }
 
-        cache.lastStatusSent = "ATIVO";
+        cache.lastSentType = "ENTRAR";
         cache.lastCycleKey = cycleKey;
+        cache.lastRoundSent = rodada;
+        cache.lastNumberSent = ultimoNumero;
 
-        await enviarMensagem(formatarMensagemAtivo(mesa));
-        console.log("📤 Enviado sinal ATIVO:", mesaId);
+        await enviarMensagem(formatarMensagemEntrada(mesa));
+        console.log("📤 Enviado ENTRAR AGORA:", mesaId);
         continue;
       }
 
-      // GREEN/LOSS → envia apenas 1x e encerra
+      // ==========================
+      // RESULTADO FINAL
+      // ==========================
       if (status === "GREEN" || status === "LOSS") {
-        if (cache.lastStatusSent === status && cache.lastCycleKey === cycleKey) {
+        if (
+          cache.lastSentType === status &&
+          cache.lastCycleKey === cycleKey &&
+          cache.lastRoundSent === rodada &&
+          cache.lastNumberSent === ultimoNumero
+        ) {
           continue;
         }
 
-        cache.lastStatusSent = status;
+        cache.lastSentType = status;
         cache.lastCycleKey = cycleKey;
+        cache.lastRoundSent = rodada;
+        cache.lastNumberSent = ultimoNumero;
 
         await enviarMensagem(formatarMensagemFinal(mesa));
-        console.log("🏁 Enviado resultado final:", status, mesaId);
+        console.log("🏁 Enviado resultado:", status, mesaId);
         continue;
       }
-
-      // outros estados ignorados
-      continue;
     }
   } catch (err) {
     console.error("❌ Erro ao consultar Oráculo:", err.message);
@@ -302,10 +341,10 @@ async function consultarOraculo() {
 }
 
 /* =========================
-   LOOP POLLING
+   LOOP
 ========================= */
 
-console.log("⏱️ Oráculo será verificado a cada 2 minutos");
+console.log(`⏱️ Oráculo será verificado a cada ${POLL_INTERVAL / 1000}s`);
 setInterval(() => {
   consultarOraculo();
 }, POLL_INTERVAL);
