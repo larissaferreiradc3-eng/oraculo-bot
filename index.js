@@ -1,5 +1,4 @@
 import "dotenv/config";
-import express from "express";
 import TelegramBot from "node-telegram-bot-api";
 
 /* =========================
@@ -7,7 +6,6 @@ import TelegramBot from "node-telegram-bot-api";
 ========================= */
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL;
 const ORACULO_API_URL = process.env.ORACULO_API_URL;
 
 const CHAT_ID_PRIVATE = process.env.CHAT_ID_PRIVATE;
@@ -15,10 +13,9 @@ const CHAT_ID_GROUP = process.env.CHAT_ID_GROUP;
 
 const POLL_INTERVAL = 2 * 60 * 1000; // 2 minutos
 
-if (!BOT_TOKEN || !RENDER_EXTERNAL_URL || !ORACULO_API_URL) {
+if (!BOT_TOKEN || !ORACULO_API_URL) {
   console.error("❌ Variáveis de ambiente faltando");
   console.log("➡️ BOT_TOKEN:", BOT_TOKEN ? "OK" : "MISSING");
-  console.log("➡️ RENDER_EXTERNAL_URL:", RENDER_EXTERNAL_URL ? "OK" : "MISSING");
   console.log("➡️ ORACULO_API_URL:", ORACULO_API_URL ? "OK" : "MISSING");
   process.exit(1);
 }
@@ -58,7 +55,6 @@ const LINKS_MESAS = {
   "TURKISH ROULETTE": "https://www.betano.bet.br/casino/live/games/turkish-roulette/3533/tables/",
   "VIP ROULETTE": "https://www.betano.bet.br/casino/live/games/vip-roulette/4859/tables/",
   "MEGA ROULETTE 3000": "https://www.betano.bet.br/casino/live/games/mega-roulette-3000/31954/tables/",
-
   "LIGHTNING STORM": "https://www.betano.bet.br/casino/live/games/lightning-storm/16782/tables/",
   "ROLETA RELAMPAGO": "https://www.betano.bet.br/casino/live/games/roleta-relampago/7895/tables/",
   "ROLETA AO VIVO": "https://www.betano.bet.br/casino/live/games/roleta-ao-vivo/7899/tables/",
@@ -73,7 +69,6 @@ const LINKS_MESAS = {
   "VIP ROULETTE EVOLUTION": "https://www.betano.bet.br/casino/live/games/vip-roulette/1532/tables/",
   "RULETA EN ESPANOL": "https://www.betano.bet.br/casino/live/games/ruleta-en-espanol/6821/tables/",
   "INSTANT ROULETTE": "https://www.betano.bet.br/casino/live/games/instant-roulette/2181/tables/",
-
   "AUTO ROULETTE EZUGI": "https://www.betano.bet.br/casino/live/games/auto-roulette/18598/tables/",
   "EZ ROULETTE BRAZIL": "https://www.betano.bet.br/casino/live/games/ez-dealer-roulette-brazil/15673/",
   "EZ ROULETTE ENGLISH": "https://www.betano.bet.br/casino/live/games/ez-dealer-roulette-english/15670/",
@@ -111,7 +106,6 @@ function alvosValidos(alvos) {
   if (!Array.isArray(alvos)) return false;
   if (!alvos.length) return false;
 
-  // não pode ser só 0
   if (alvos.length === 1 && alvos[0] === 0) return false;
 
   return true;
@@ -129,37 +123,16 @@ function cycleKey(mesa) {
 const lastCycleSent = new Map();
 
 /* =========================
-   EXPRESS
+   TELEGRAM BOT (POLLING)
 ========================= */
 
-const app = express();
-app.use(express.json());
-
-app.get("/", (req, res) => {
-  res.send("BOT ONLINE");
-});
-
-/* =========================
-   TELEGRAM (WEBHOOK CORRETO)
-========================= */
-
-const bot = new TelegramBot(BOT_TOKEN, { webHook: true });
-
-const WEBHOOK_PATH = `/bot${BOT_TOKEN}`;
-const WEBHOOK_URL = `${RENDER_EXTERNAL_URL}${WEBHOOK_PATH}`;
-
-await bot.setWebHook(WEBHOOK_URL);
-
-console.log("✅ Webhook Telegram registrado:", WEBHOOK_URL);
-
-app.post(WEBHOOK_PATH, (req, res) => {
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-});
+const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
 bot.onText(/\/start/, async (msg) => {
   await bot.sendMessage(msg.chat.id, "🤖 Oráculo Bot online e conectado!");
 });
+
+console.log("✅ Bot Telegram iniciado em modo polling (sem webhook e sem porta).");
 
 /* =========================
    FUNÇÃO DE ENVIO
@@ -222,11 +195,9 @@ async function consultarOraculo() {
       const status = mesa.status;
       const rodada = mesa.rodada ?? 0;
 
-      // só entra em ATIVO na rodada 4
       if (status !== "ATIVO") continue;
       if (rodada !== 4) continue;
 
-      // não envia sem alvos
       if (!alvosValidos(mesa.alvos)) {
         console.log("⛔ Entrada ignorada (sem alvos válidos):", mesa.mesaNome);
         continue;
@@ -234,7 +205,6 @@ async function consultarOraculo() {
 
       const key = cycleKey(mesa);
 
-      // anti spam
       if (lastCycleSent.get(mesa.mesaId) === key) {
         continue;
       }
@@ -250,7 +220,7 @@ async function consultarOraculo() {
 }
 
 /* =========================
-   LOOP POLLING
+   LOOP POLLING ORÁCULO
 ========================= */
 
 console.log("⏱️ Oráculo será verificado a cada 2 minutos");
@@ -260,13 +230,3 @@ consultarOraculo();
 setInterval(() => {
   consultarOraculo();
 }, POLL_INTERVAL);
-
-/* =========================
-   START SERVER
-========================= */
-
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log("🚀 Servidor ativo na porta", PORT);
-});
