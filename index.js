@@ -11,6 +11,8 @@ const ORACULO_API_URL = process.env.ORACULO_API_URL;
 const CHAT_ID_PRIVATE = process.env.CHAT_ID_PRIVATE;
 const CHAT_ID_GROUP = process.env.CHAT_ID_GROUP;
 
+const MIN_SCORE = Number(process.env.MIN_SCORE || 70);
+
 const POLL_INTERVAL = 2 * 60 * 1000; // 2 minutos
 
 if (!BOT_TOKEN || !ORACULO_API_URL) {
@@ -111,9 +113,17 @@ function alvosValidos(alvos) {
   return true;
 }
 
+function scoreValido(score) {
+  if (score === null || score === undefined) return false;
+  const n = Number(score);
+  if (Number.isNaN(n)) return false;
+  return n >= MIN_SCORE;
+}
+
 function cycleKey(mesa) {
   const a = Array.isArray(mesa.alvos) ? mesa.alvos.join(",") : "NO_ALVOS";
-  return `${mesa.mesaId}|${mesa.status}|${mesa.rodada}|${mesa.ultimoNumero}|${a}`;
+  const s = mesa.score ?? "NO_SCORE";
+  return `${mesa.mesaId}|${mesa.status}|${mesa.rodada}|${mesa.ultimoNumero}|${a}|${s}`;
 }
 
 /* =========================
@@ -133,6 +143,7 @@ bot.onText(/\/start/, async (msg) => {
 });
 
 console.log("✅ Bot Telegram iniciado em modo polling (sem webhook e sem porta).");
+console.log("🎯 MIN_SCORE configurado:", MIN_SCORE);
 
 /* =========================
    FUNÇÃO DE ENVIO
@@ -160,6 +171,7 @@ function formatarMensagemEntrada(mesa) {
   const mesaNome = mesa.mesaNome || "Mesa desconhecida";
   const rodada = mesa.rodada ?? "?";
   const ultimoNumero = mesa.ultimoNumero ?? "?";
+  const score = mesa.score ?? "SEM SCORE";
 
   const alvosTxt = mesa.alvos.join(", ");
   const linkMesa = getMesaLink(mesaNome);
@@ -169,7 +181,8 @@ function formatarMensagemEntrada(mesa) {
     `🎰 <b>Mesa:</b> ${mesaNome}\n\n` +
     `🎯 <b>Alvos:</b> ${alvosTxt}\n` +
     `🎲 <b>Rodada:</b> ${rodada} / 8\n` +
-    `🔢 <b>Último Número:</b> ${ultimoNumero}\n\n` +
+    `🔢 <b>Último Número:</b> ${ultimoNumero}\n` +
+    `📊 <b>Score:</b> ${score}\n\n` +
     `🔗 <b>Mesa:</b>\n${linkMesa ? linkMesa : "Link não cadastrado"}\n\n` +
     `⚡ <b>Entre apenas nos alvos e siga o gerenciamento!</b>`
   );
@@ -203,6 +216,11 @@ async function consultarOraculo() {
         continue;
       }
 
+      if (!scoreValido(mesa.score)) {
+        console.log("⛔ Entrada ignorada (score baixo):", mesa.mesaNome, "| score:", mesa.score);
+        continue;
+      }
+
       const key = cycleKey(mesa);
 
       if (lastCycleSent.get(mesa.mesaId) === key) {
@@ -212,7 +230,7 @@ async function consultarOraculo() {
       lastCycleSent.set(mesa.mesaId, key);
 
       await enviarMensagem(formatarMensagemEntrada(mesa));
-      console.log("📤 Entrada enviada:", mesa.mesaNome, "| rodada:", rodada);
+      console.log("📤 Entrada enviada:", mesa.mesaNome, "| rodada:", rodada, "| score:", mesa.score);
     }
   } catch (err) {
     console.error("❌ Erro ao consultar Oráculo:", err.message);
