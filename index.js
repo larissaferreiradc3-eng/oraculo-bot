@@ -1,5 +1,6 @@
 import "dotenv/config";
 import TelegramBot from "node-telegram-bot-api";
+import express from "express";
 
 /* =========================
    CONFIG
@@ -14,6 +15,7 @@ const CHAT_ID_GROUP = process.env.CHAT_ID_GROUP;
 const MIN_SCORE = Number(process.env.MIN_SCORE || 70);
 
 const POLL_INTERVAL = 2 * 60 * 1000; // 2 minutos
+const PORT = process.env.PORT || 10000;
 
 if (!BOT_TOKEN || !ORACULO_API_URL) {
   console.error("❌ Variáveis de ambiente faltando");
@@ -28,6 +30,24 @@ if (!CHAT_ID_PRIVATE || !CHAT_ID_GROUP) {
   console.log("➡️ CHAT_ID_GROUP:", CHAT_ID_GROUP ? "OK" : "MISSING");
   process.exit(1);
 }
+
+/* =========================
+   MINI SERVER (SÓ PRA RENDER)
+========================= */
+
+const app = express();
+
+app.get("/", (req, res) => {
+  res.send("ORACULO BOT ONLINE");
+});
+
+app.get("/health", (req, res) => {
+  res.json({ ok: true, service: "oraculo-bot", polling: true, minScore: MIN_SCORE });
+});
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🌐 Web Service ativo na porta ${PORT} (apenas healthcheck)`);
+});
 
 /* =========================
    LINKS DAS MESAS
