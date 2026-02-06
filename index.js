@@ -31,13 +31,10 @@ if (!CHAT_ID_PRIVATE || !CHAT_ID_GROUP) {
 }
 
 /* =========================
-   LINKS DAS MESAS (COMPLETO)
+   LINKS DAS MESAS
 ========================= */
 
 const LINKS_MESAS = {
-  // =========================
-  // PRAGMATIC / BETANO
-  // =========================
   "BRASILEIRA PRAGMATIC": "https://www.betano.bet.br/casino/live/games/brazilian-roulette/11354/tables/",
   "AUTO MEGA ROULETTE 0,50": "https://www.betano.bet.br/casino/live/games/auto-mega-roulette/10842/tables/",
   "AUTO ROULETTE 2,50": "https://www.betano.bet.br/casino/live/games/auto-roulette/3502/tables/",
@@ -62,9 +59,6 @@ const LINKS_MESAS = {
   "VIP ROULETTE": "https://www.betano.bet.br/casino/live/games/vip-roulette/4859/tables/",
   "MEGA ROULETTE 3000": "https://www.betano.bet.br/casino/live/games/mega-roulette-3000/31954/tables/",
 
-  // =========================
-  // EVOLUTION
-  // =========================
   "LIGHTNING STORM": "https://www.betano.bet.br/casino/live/games/lightning-storm/16782/tables/",
   "ROLETA RELAMPAGO": "https://www.betano.bet.br/casino/live/games/roleta-relampago/7895/tables/",
   "ROLETA AO VIVO": "https://www.betano.bet.br/casino/live/games/roleta-ao-vivo/7899/tables/",
@@ -80,9 +74,6 @@ const LINKS_MESAS = {
   "RULETA EN ESPANOL": "https://www.betano.bet.br/casino/live/games/ruleta-en-espanol/6821/tables/",
   "INSTANT ROULETTE": "https://www.betano.bet.br/casino/live/games/instant-roulette/2181/tables/",
 
-  // =========================
-  // EZUGI
-  // =========================
   "AUTO ROULETTE EZUGI": "https://www.betano.bet.br/casino/live/games/auto-roulette/18598/tables/",
   "EZ ROULETTE BRAZIL": "https://www.betano.bet.br/casino/live/games/ez-dealer-roulette-brazil/15673/",
   "EZ ROULETTE ENGLISH": "https://www.betano.bet.br/casino/live/games/ez-dealer-roulette-english/15670/",
@@ -116,16 +107,26 @@ function getMesaLink(nomeMesa) {
   return null;
 }
 
-function normalizeAlvos(alvos) {
-  if (!Array.isArray(alvos)) return "";
-  return alvos.map((n) => String(n)).join(",");
+function alvosValidos(alvos) {
+  if (!Array.isArray(alvos)) return false;
+  if (!alvos.length) return false;
+
+  // não pode ser só 0
+  if (alvos.length === 1 && alvos[0] === 0) return false;
+
+  return true;
+}
+
+function cycleKey(mesa) {
+  const a = Array.isArray(mesa.alvos) ? mesa.alvos.join(",") : "NO_ALVOS";
+  return `${mesa.mesaId}|${mesa.status}|${mesa.rodada}|${mesa.ultimoNumero}|${a}`;
 }
 
 /* =========================
    CACHE ANTI-SPAM
 ========================= */
 
-const mesaCache = new Map();
+const lastCycleSent = new Map();
 
 /* =========================
    EXPRESS
@@ -139,14 +140,17 @@ app.get("/", (req, res) => {
 });
 
 /* =========================
-   TELEGRAM
+   TELEGRAM (WEBHOOK CORRETO)
 ========================= */
 
-const bot = new TelegramBot(BOT_TOKEN);
-const WEBHOOK_PATH = `/bot${BOT_TOKEN}`;
+const bot = new TelegramBot(BOT_TOKEN, { webHook: true });
 
-await bot.setWebHook(`${RENDER_EXTERNAL_URL}${WEBHOOK_PATH}`);
-console.log("✅ Webhook Telegram registrado:", `${RENDER_EXTERNAL_URL}${WEBHOOK_PATH}`);
+const WEBHOOK_PATH = `/bot${BOT_TOKEN}`;
+const WEBHOOK_URL = `${RENDER_EXTERNAL_URL}${WEBHOOK_PATH}`;
+
+await bot.setWebHook(WEBHOOK_URL);
+
+console.log("✅ Webhook Telegram registrado:", WEBHOOK_URL);
 
 app.post(WEBHOOK_PATH, (req, res) => {
   bot.processUpdate(req.body);
@@ -176,7 +180,7 @@ async function enviarMensagem(texto) {
 }
 
 /* =========================
-   FORMATADOR ENTRADA
+   FORMATADOR
 ========================= */
 
 function formatarMensagemEntrada(mesa) {
@@ -184,21 +188,17 @@ function formatarMensagemEntrada(mesa) {
   const rodada = mesa.rodada ?? "?";
   const ultimoNumero = mesa.ultimoNumero ?? "?";
 
-  const alvosTxt =
-    Array.isArray(mesa.alvos) && mesa.alvos.length
-      ? mesa.alvos.join(", ")
-      : "Sem alvos";
-
+  const alvosTxt = mesa.alvos.join(", ");
   const linkMesa = getMesaLink(mesaNome);
 
   return (
-    `🚨 <b>ENTRADA CONFIRMADA</b> 🚨\n\n` +
+    `🚨 <b>ENTRAR AGORA</b> 🚨\n\n` +
     `🎰 <b>Mesa:</b> ${mesaNome}\n\n` +
     `🎯 <b>Alvos:</b> ${alvosTxt}\n` +
-    `🔢 <b>Último Número:</b> ${ultimoNumero}\n` +
-    `🎲 <b>Rodada:</b> ${rodada} / 8\n\n` +
-    `🔗 <b>Acesse a Mesa:</b>\n${linkMesa ? linkMesa : "Link não cadastrado"}\n\n` +
-    `⚡ <b>Entre agora somente nos alvos!</b>`
+    `🎲 <b>Rodada:</b> ${rodada} / 8\n` +
+    `🔢 <b>Último Número:</b> ${ultimoNumero}\n\n` +
+    `🔗 <b>Mesa:</b>\n${linkMesa ? linkMesa : "Link não cadastrado"}\n\n` +
+    `⚡ <b>Entre apenas nos alvos e siga o gerenciamento!</b>`
   );
 }
 
@@ -219,42 +219,30 @@ async function consultarOraculo() {
     console.log(`👀 Leitura do Oráculo: ${data.mesas.length} mesas analisadas`);
 
     for (const mesa of data.mesas) {
-      const mesaId = mesa.mesaId || "SEM_ID";
       const status = mesa.status;
+      const rodada = mesa.rodada ?? 0;
 
-      // IGNORA tudo que não for ATIVO
+      // só entra em ATIVO na rodada 4
       if (status !== "ATIVO") continue;
+      if (rodada !== 4) continue;
 
-      // NÃO ENVIA SE NÃO TIVER ALVOS
-      if (!Array.isArray(mesa.alvos) || mesa.alvos.length === 0) {
+      // não envia sem alvos
+      if (!alvosValidos(mesa.alvos)) {
+        console.log("⛔ Entrada ignorada (sem alvos válidos):", mesa.mesaNome);
         continue;
       }
 
-      // SÓ ENVIA SE FOR EXATAMENTE NA RODADA 4
-      if (mesa.rodada !== 4) {
+      const key = cycleKey(mesa);
+
+      // anti spam
+      if (lastCycleSent.get(mesa.mesaId) === key) {
         continue;
       }
 
-      if (!mesaCache.has(mesaId)) {
-        mesaCache.set(mesaId, {
-          lastStatusSent: null,
-          lastCycleKey: null
-        });
-      }
-
-      const cache = mesaCache.get(mesaId);
-      const cycleKey = normalizeAlvos(mesa.alvos);
-
-      // ANTI-SPAM: envia apenas 1x por ciclo
-      if (cache.lastStatusSent === "ATIVO" && cache.lastCycleKey === cycleKey) {
-        continue;
-      }
-
-      cache.lastStatusSent = "ATIVO";
-      cache.lastCycleKey = cycleKey;
+      lastCycleSent.set(mesa.mesaId, key);
 
       await enviarMensagem(formatarMensagemEntrada(mesa));
-      console.log("📤 Entrada enviada:", mesaId);
+      console.log("📤 Entrada enviada:", mesa.mesaNome, "| rodada:", rodada);
     }
   } catch (err) {
     console.error("❌ Erro ao consultar Oráculo:", err.message);
@@ -266,6 +254,8 @@ async function consultarOraculo() {
 ========================= */
 
 console.log("⏱️ Oráculo será verificado a cada 2 minutos");
+
+consultarOraculo();
 
 setInterval(() => {
   consultarOraculo();
